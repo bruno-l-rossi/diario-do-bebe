@@ -43,6 +43,10 @@ Tabela `events`:
 
 RLS liga e quatro políticas (select, insert, update, delete) filtram tudo por `auth.uid() = user_id`.
 
+Tabela `profiles` (uma linha por conta): `user_id`, `baby_name`, `baby_birth`, `baby_photo` (a foto vai como base64 aqui, fora do token de login pra não inchar o cabeçalho), `updated_at`. Mesma RLS por `user_id`.
+
+Visual: tema escuro azul-marinho. No primeiro acesso o app pede nome, foto e data de nascimento do bebê. A home mostra a foto de perfil, uma saudação pela hora do dia e a idade.
+
 ## Rodar local
 
 Abre o `index.html` no navegador. Login e gravação funcionam contra o Supabase mesmo em arquivo local.
