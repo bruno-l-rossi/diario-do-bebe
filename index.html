@@ -79,7 +79,8 @@
   .ev .info .t1{font-size:14.5px; font-weight:600}
   .ev .info .t2{font-size:12px; color:var(--muted); margin-top:1px}
   .ev .time{font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
-  .ev .del{background:none; border:none; color:#5d728c; font-size:18px; padding:4px 2px 4px 8px; cursor:pointer}
+  .ev .edit{background:none; border:none; color:#6f87a3; font-size:16px; padding:4px 2px 4px 6px; cursor:pointer}
+  .ev .del{background:none; border:none; color:#5d728c; font-size:18px; padding:4px 2px 4px 4px; cursor:pointer}
   .badge{display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; color:#0d1b2a}
 
   .stat-card{background:var(--card); border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:var(--shadow); border:1px solid var(--line)}
@@ -266,6 +267,7 @@ function dayLabel(ts){
 }
 function nightKey(ts){return dayKey(ts-12*36e5);}
 function fmtClock(min){min=Math.round(((min%1440)+1440)%1440);return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');}
+function toLocalInput(ms){const d=new Date(ms);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
 function ageLabel(birth){
   if(!birth)return '';
   const b=new Date(birth+'T00:00:00'), n=new Date();
@@ -430,6 +432,43 @@ async function delEvent(id){
   toast('Apagado'); await loadEvents();
 }
 
+let edQ=null;
+window.pickQE=v=>{edQ=v;QUAL.forEach(q=>{const el=document.getElementById('qe'+q.v);if(!el)return;el.style.borderColor=q.v===v?q.cor:'var(--line)';el.style.background=q.v===v?q.cor:'var(--card)';el.style.color=q.v===v?'#06121f':'var(--ink)';});};
+function openEdit(id){
+  const e=EV.find(x=>x.id===id); if(!e)return;
+  const t=TYPES[e.type];
+  const isSession=['soneca','sono','despertar'].includes(e.type);
+  const isRef=e.type==='refeicao';
+  let html=`<h2>${t.emoji} Editar ${t.nome.toLowerCase()}</h2>
+    <p class="ph">Ajuste o horário se esqueceu de marcar na hora certa.</p>
+    <div class="field"><label>${isSession?'Início':'Horário'}</label><input type="datetime-local" id="ed-ts" value="${toLocalInput(e.ts)}"></div>`;
+  if(isSession) html+=`<div class="field"><label>Fim${e.end?'':' (deixe vazio se ainda em andamento)'}</label><input type="datetime-local" id="ed-end" value="${e.end?toLocalInput(e.end):''}"></div>`;
+  if(isRef) html+=`<div class="field"><label>O quanto comeu</label><div class="qbtns">${QUAL.map(q=>`<button class="qbtn" onclick="pickQE(${q.v})" id="qe${q.v}"><span class="qe">${q.emoji}</span>${q.nome}</button>`).join('')}</div></div>
+      <div class="field"><label>Nota</label><input id="ed-note" value="${(e.note||'').replace(/"/g,'&quot;')}" placeholder="opcional"></div>`;
+  html+=`<div class="stack">
+      <button class="btn primary" onclick="saveEdit('${id}',${isSession},${isRef})">Salvar</button>
+      <button class="btn ghost" onclick="closeSheet()">Cancelar</button>
+    </div>`;
+  showSheet(html);
+  if(isRef){edQ=e.quality; pickQE(e.quality);}
+}
+async function saveEdit(id,isSession,isRef){
+  const tsV=document.getElementById('ed-ts').value;
+  if(!tsV){toast('Coloque o horário');return;}
+  const patch={ts:new Date(tsV).toISOString()};
+  if(isSession){
+    const endV=document.getElementById('ed-end').value;
+    if(endV){
+      if(new Date(endV).getTime()<new Date(tsV).getTime()){toast('O fim não pode ser antes do início');return;}
+      patch.end_ts=new Date(endV).toISOString();
+    } else patch.end_ts=null;
+  }
+  if(isRef){patch.quality=(edQ==null?null:edQ); patch.note=document.getElementById('ed-note').value.trim();}
+  const {error}=await sb.from('events').update(patch).eq('id',id);
+  if(error){toast('Erro ao salvar');console.error(error);return;}
+  closeSheet(); toast('Atualizado 💙'); await loadEvents();
+}
+
 /* despertares fechados dentro de uma noite, e sono líquido */
 function despertaresNa(sono){
   const fim=sono.end||Date.now();
@@ -541,7 +580,9 @@ function renderHist(){
       const timeR=isSession?'':fmtH(e.ts);
       html+=`<div class="ev"><div class="dot" style="background:${t.bg}">${t.emoji}</div>
         <div class="info"><div class="t1">${t1}</div>${t2?`<div class="t2">${t2}</div>`:''}</div>
-        <div class="time">${timeR}</div><button class="del" onclick="delEvent('${e.id}')">✕</button></div>`;
+        <div class="time">${timeR}</div>
+        <button class="edit" onclick="openEdit('${e.id}')" title="Editar horário">✎</button>
+        <button class="del" onclick="delEvent('${e.id}')" title="Apagar">✕</button></div>`;
     });
   });
   el.innerHTML=html;
