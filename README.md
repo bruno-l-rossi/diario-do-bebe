@@ -4,10 +4,11 @@ App simples pra registrar a rotina do bebê com um toque e enxergar os padrões 
 
 ## O que dá pra registrar
 
-- **Soneca**: começa e encerra, calcula a duração sozinho.
+- **Soneca**: cochilo de dia. Começa e encerra, calcula a duração sozinho.
+- **Sono noturno**: a dormida da noite. Começa à noite e encerra de manhã ("Começar o dia"). Guarda hora de deitar, hora de acordar e total dormido, já descontando os despertares.
 - **Refeição**: hora + o quanto comeu (recusou, pouco, médio, bem), com nota opcional. Pensado pra fase de introdução alimentar, onde a recusa é o dado que mais importa.
 - **Mamada**: um toque marca a hora.
-- **Despertar noturno**: um toque a cada vez que acorda de noite.
+- **Despertar noturno**: começa/termina. Primeiro toque marca que acordou, segundo marca que voltou a dormir. Mede quantas vezes acorda e quanto demora pra voltar ao sono. Esse tempo acordado é descontado do sono da noite.
 
 ## O que ele responde
 
