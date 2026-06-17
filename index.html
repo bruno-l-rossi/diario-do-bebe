@@ -54,6 +54,7 @@
   .ongoing.soneca{background:linear-gradient(135deg,#2f6dc0,#1c4f9e)}
   .ongoing.sono{background:linear-gradient(135deg,#3b3f9e,#272a73)}
   .ongoing.despertar{background:linear-gradient(135deg,#7b4f9e,#5a3475)}
+  .ongoing.mamada{background:linear-gradient(135deg,#b9742f,#8a531d)}
   .ongoing .txt{flex:1}
   .ongoing .txt .a{font-size:13px; opacity:.9}
   .ongoing .txt .b{font-size:19px; font-weight:700; margin-top:2px}
@@ -171,6 +172,7 @@
   <p class="ph-cap">opcional, fica só na sua conta</p>
   <input type="file" id="phInput" accept="image/*" style="display:none" onchange="pickPhoto(event)">
   <div class="field"><label>Nome do bebê</label><input id="onb-name" placeholder="ex: Tom" autocomplete="off"></div>
+  <div class="field"><label>Seu nome (opcional)</label><input id="onb-mother" placeholder="ex: Ana" autocomplete="off"></div>
   <div class="field"><label>Data de nascimento (opcional)</label><input id="onb-birth" type="date"></div>
   <button class="btn primary" onclick="saveOnboard()">Começar</button>
 </div>
@@ -203,8 +205,8 @@
         <span class="ico">🛌</span>
         <span><span class="nm" id="sono-nm">Iniciar sono noturno</span><br><span class="ds" id="sono-ds">A dormida da noite. Encerra de manhã</span></span>
       </button>
-      <button class="act mamada" onclick="quickAdd('mamada')">
-        <span class="ico">🍼</span><span class="nm">Mamada</span><span class="ds">Registra agora</span>
+      <button class="act mamada" id="btn-mamada" onclick="onMamada()">
+        <span class="ico">🍼</span><span class="nm" id="mam-nm">Mamada</span><span class="ds" id="mam-ds">Começar a mamar</span>
       </button>
       <button class="act despertar" id="btn-despertar" onclick="onDespertar()">
         <span class="ico">🌙</span><span class="nm" id="desp-nm">Despertar</span><span class="ds" id="desp-ds">Acordou de noite</span>
@@ -237,7 +239,7 @@ const SB_URL='https://xvydkvqfcgfysrkmzsae.supabase.co';
 const SB_KEY='sb_publishable_Iylj-64xnspCSFg-u34jmw_sdWa2TU-';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 
-let EV=[], BABY='', PHOTO='', BIRTH='', currentEmail='', mode='login', tmpPhoto='', USERID='';
+let EV=[], BABY='', MOTHER='', PHOTO='', BIRTH='', currentEmail='', mode='login', tmpPhoto='', USERID='';
 
 const TYPES={
   soneca:{nome:'Soneca',emoji:'😴',cor:'var(--sono)',bg:'#1b3559'},
@@ -347,12 +349,13 @@ function showOnboard(){
   tmpPhoto=PHOTO||'';
   if(tmpPhoto)document.getElementById('phPick').innerHTML=`<img src="${tmpPhoto}">`;
   document.getElementById('onb-name').value=BABY||'';
+  document.getElementById('onb-mother').value=MOTHER||'';
   document.getElementById('onb-birth').value=BIRTH||'';
 }
 async function saveOnboard(){
   const name=document.getElementById('onb-name').value.trim();
   if(!name){const e=document.getElementById('onb-err');e.textContent='Coloca o nome do bebê pra continuar.';e.classList.add('show');return;}
-  BABY=name; BIRTH=document.getElementById('onb-birth').value||''; PHOTO=tmpPhoto||'';
+  BABY=name; MOTHER=document.getElementById('onb-mother').value.trim(); BIRTH=document.getElementById('onb-birth').value||''; PHOTO=tmpPhoto||'';
   await saveProfileRow();
   document.getElementById('onboard').classList.remove('show');
   revealApp();
@@ -398,10 +401,12 @@ async function onDespertar(){
   else{const {error}=await sb.from('events').insert({type:'despertar',ts:new Date().toISOString(),end_ts:null}); if(error){toast('Erro');return;} toast('Acordou de noite 🌙');}
   await loadEvents();
 }
-async function quickAdd(type){
-  const {error}=await sb.from('events').insert({type,ts:new Date().toISOString()});
-  if(error){toast('Erro');return;}
-  toast(TYPES[type].nome+' registrada '+TYPES[type].emoji); await loadEvents();
+function activeMamada(){return EV.find(e=>e.type==='mamada'&&!e.end);}
+async function onMamada(){
+  const a=activeMamada();
+  if(a){const {error}=await sb.from('events').update({end_ts:new Date().toISOString()}).eq('id',a.id); if(error){toast('Erro');return;} toast('Mamada: '+fmtDur(Date.now()-a.ts));}
+  else{const {error}=await sb.from('events').insert({type:'mamada',ts:new Date().toISOString(),end_ts:null}); if(error){toast('Erro');return;} toast('Mamada iniciada 🍼');}
+  await loadEvents();
 }
 function openRefeicao(){
   let chosen=null;
@@ -437,7 +442,7 @@ window.pickQE=v=>{edQ=v;QUAL.forEach(q=>{const el=document.getElementById('qe'+q
 function openEdit(id){
   const e=EV.find(x=>x.id===id); if(!e)return;
   const t=TYPES[e.type];
-  const isSession=['soneca','sono','despertar'].includes(e.type);
+  const isSession=['soneca','sono','despertar','mamada'].includes(e.type);
   const isRef=e.type==='refeicao';
   let html=`<h2>${t.emoji} Editar ${t.nome.toLowerCase()}</h2>
     <p class="ph">Ajuste o horário se esqueceu de marcar na hora certa.</p>
@@ -497,7 +502,10 @@ function setAvatar(el){
 }
 function renderHeader(){
   const idade=ageLabel(BIRTH);
-  document.getElementById('greet').textContent=saudacao()+(BABY?(', você e '+BABY):'');
+  let g=saudacao();
+  if(MOTHER&&BABY)g+=', '+MOTHER+' e '+BABY;
+  else if(BABY)g+=', você e '+BABY;
+  document.getElementById('greet').textContent=g;
   document.getElementById('title').textContent=BABY?(BABY+(idade?' · '+idade:'')):'Diário do Bebê';
   setAvatar(document.getElementById('avatar'));
 }
@@ -512,6 +520,10 @@ function updateButtons(){
   document.getElementById('desp-nm').textContent=desp?'Voltou a dormir':'Despertar';
   document.getElementById('desp-ds').textContent=desp?('Acordado desde '+fmtH(desp.ts)):'Acordou de noite';
   document.getElementById('btn-despertar').classList.toggle('on',!!desp);
+  const mam=activeMamada();
+  document.getElementById('mam-nm').textContent=mam?'Terminou de mamar':'Mamada';
+  document.getElementById('mam-ds').textContent=mam?('Mamando desde '+fmtH(mam.ts)):'Começar a mamar';
+  document.getElementById('btn-mamada').classList.toggle('on',!!mam);
 }
 function render(){ renderHeader(); updateButtons(); renderOngoing(); renderResumo(); renderHist(); renderStats(); }
 
@@ -528,6 +540,10 @@ function renderOngoing(){
   if(soneca)items.push(`<div class="ongoing soneca"><span style="font-size:24px">😴</span>
     <div class="txt"><div class="a">Soneca desde ${fmtH(soneca.ts)}</div><div class="b" id="ong-soneca">—</div></div>
     <button onclick="onSoneca()">Acordou</button></div>`);
+  const mam=activeMamada();
+  if(mam)items.push(`<div class="ongoing mamada"><span style="font-size:24px">🍼</span>
+    <div class="txt"><div class="a">Mamando desde ${fmtH(mam.ts)}</div><div class="b" id="ong-mam">—</div></div>
+    <button onclick="onMamada()">Terminou</button></div>`);
   slot.innerHTML=items.join('');
   tickOngoing();
 }
@@ -539,7 +555,8 @@ function tickOngoing(){
     const a=document.getElementById('ong-sono'); if(sono&&a)a.textContent='há '+fmtDur(Date.now()-sono.ts);
     const b=document.getElementById('ong-desp'); if(desp&&b)b.textContent='há '+fmtDur(Date.now()-desp.ts);
     const c=document.getElementById('ong-soneca'); if(soneca&&c)c.textContent='há '+fmtDur(Date.now()-soneca.ts);
-    if(!sono&&!desp&&!soneca)clearInterval(ongTimer);
+    const mam=activeMamada(); const e=document.getElementById('ong-mam'); if(mam&&e)e.textContent='há '+fmtDur(Date.now()-mam.ts);
+    if(!sono&&!desp&&!soneca&&!mam)clearInterval(ongTimer);
   };
   upd(); ongTimer=setInterval(upd,30000);
 }
@@ -574,9 +591,9 @@ function renderHist(){
         else{t1='Sono noturno';t2='dormindo…';}
       }
       else if(e.type==='refeicao'){const q=QUAL[e.quality]||QUAL[0];t1=`Refeição <span class="badge" style="background:${q.cor}">${q.emoji} ${q.nome}</span>`;t2=e.note||'';}
-      else if(e.type==='mamada'){t2='Mamada';}
+      else if(e.type==='mamada'){t1='Mamada';t2=e.end?(fmtH(e.ts)+' → '+fmtH(e.end)+' · '+fmtDur(e.end-e.ts)):'mamando…';}
       else if(e.type==='despertar'){t1='Despertar noturno';t2=e.end?(fmtH(e.ts)+' → '+fmtH(e.end)+' · '+fmtDur(e.end-e.ts)+' acordado'):('acordado desde '+fmtH(e.ts)+'…');}
-      const isSession=['soneca','sono','despertar'].includes(e.type);
+      const isSession=['soneca','sono','despertar','mamada'].includes(e.type);
       const timeR=isSession?'':fmtH(e.ts);
       html+=`<div class="ev"><div class="dot" style="background:${t.bg}">${t.emoji}</div>
         <div class="info"><div class="t1">${t1}</div>${t2?`<div class="t2">${t2}</div>`:''}</div>
@@ -662,10 +679,25 @@ function statSonecas(){
 function statMamadas(){
   const mam=EV.filter(e=>e.type==='mamada'); if(!mam.length)return '';
   const byDay={}; mam.forEach(e=>{const k=dayKey(e.ts);byDay[k]=(byDay[k]||0)+1;});
-  const dias=Object.keys(byDay); const media=mam.length/dias.length;
-  const inner=`<div class="big-num">${media.toFixed(1)} <small>mamadas / dia</small></div>
-    <div class="hint">Média de <b>${dias.length} dia${dias.length>1?'s':''}</b> (${mam.length} no total).</div>`;
-  return card('🍼','Mamadas','Quantas por dia, em média?',inner);
+  const dias=Object.keys(byDay); const mediaDia=mam.length/dias.length;
+  const closed=mam.filter(e=>e.end);
+  let inner=`<div class="big-num">${mediaDia.toFixed(1)} <small>mamadas / dia</small></div>
+    <div class="hint">Base de <b>${dias.length} dia${dias.length>1?'s':''}</b> (${mam.length} no total).</div>`;
+  if(closed.length){
+    const avg=closed.reduce((s,e)=>s+(e.end-e.ts),0)/closed.length;
+    const byHour={}; closed.forEach(e=>{const h=new Date(e.ts).getHours();(byHour[h]=byHour[h]||[]).push(e.end-e.ts);});
+    const horas=Object.keys(byHour).map(Number).sort((a,b)=>a-b);
+    const maxAvg=Math.max(...horas.map(h=>byHour[h].reduce((s,v)=>s+v,0)/byHour[h].length));
+    let best={h:null,avg:0};
+    const bars=horas.map(h=>{const arr=byHour[h];const a=arr.reduce((s,v)=>s+v,0)/arr.length;if(a>best.avg)best={h,avg:a};return bar(String(h).padStart(2,'0')+'h',Math.round(a/maxAvg*100),fmtDur(a),'var(--mamada)');}).join('');
+    inner+=`<div class="big-num" style="margin-top:14px">${fmtDur(avg)} <small>por mamada</small></div>
+      <div class="hint">Base de ${closed.length} mamada${closed.length>1?'s':''} com início e fim. Barras = duração média por hora.</div>
+      <div class="section-t" style="margin:14px 2px 8px">Duração por hora</div>${bars}
+      <div class="hint">Mama por mais tempo por volta das <b>${best.h!=null?String(best.h).padStart(2,'0')+'h':'—'}</b>.</div>`;
+  } else {
+    inner+=`<div class="hint">Use o começar/terminar na mamada pra medir a duração e ver os melhores horários.</div>`;
+  }
+  return card('🍼','Mamadas','Quantas por dia, e qual a duração média?',inner);
 }
 
 /* ===== sheet / settings ===== */
@@ -680,6 +712,7 @@ function openSettings(){
     </div>
     <p style="text-align:center;font-size:12px;color:var(--muted);margin:0 0 16px">toque pra trocar a foto</p>
     <div class="field"><label>Nome do bebê</label><input id="bname" value="${BABY||''}" placeholder="ex: Tom"></div>
+    <div class="field"><label>Seu nome (mãe/responsável)</label><input id="mname" value="${MOTHER||''}" placeholder="ex: Ana"></div>
     <div class="field"><label>Data de nascimento</label><input id="bbirth" type="date" value="${BIRTH||''}"></div>
     <div class="stack">
       <button class="btn primary" onclick="saveProfile()">Salvar</button>
@@ -693,13 +726,14 @@ function openSettings(){
 }
 async function saveProfile(){
   BABY=document.getElementById('bname').value.trim()||BABY;
+  MOTHER=document.getElementById('mname').value.trim();
   BIRTH=document.getElementById('bbirth').value||'';
   PHOTO=tmpPhoto||PHOTO;
   await saveProfileRow();
   closeSheet(); render(); toast('Salvo 💙');
 }
 async function saveProfileRow(){
-  const {error}=await sb.from('profiles').upsert({user_id:USERID,baby_name:BABY,baby_birth:BIRTH||null,baby_photo:PHOTO,updated_at:new Date().toISOString()});
+  const {error}=await sb.from('profiles').upsert({user_id:USERID,baby_name:BABY,mother_name:MOTHER||null,baby_birth:BIRTH||null,baby_photo:PHOTO,updated_at:new Date().toISOString()});
   if(error){console.error(error); toast('Erro ao salvar perfil');}
 }
 
@@ -712,7 +746,7 @@ async function loadProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('user_id',USERID).maybeSingle();
   if(error)console.error(error);
   const m=data||{};
-  BABY=m.baby_name||''; BIRTH=m.baby_birth||''; PHOTO=m.baby_photo||'';
+  BABY=m.baby_name||''; MOTHER=m.mother_name||''; BIRTH=m.baby_birth||''; PHOTO=m.baby_photo||'';
 }
 function revealApp(){
   document.getElementById('boot').style.display='none';
