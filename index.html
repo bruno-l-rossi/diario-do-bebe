@@ -102,6 +102,11 @@
   .empty{text-align:center; color:var(--muted); padding:40px 20px; font-size:14px}
   .empty .ico{font-size:40px; display:block; margin-bottom:10px; opacity:.7}
 
+  #installbar{display:flex; align-items:center; gap:10px; margin:0 16px 8px; padding:11px 14px; background:linear-gradient(135deg,#2f6dc0,#1c4f9e); border-radius:14px; box-shadow:var(--shadow); color:#fff}
+  #installbar .ib-txt{flex:1; font-size:13.5px; font-weight:600}
+  #installbar .ib-btn{background:#fff; color:#1c2a52; border:none; border-radius:10px; padding:9px 14px; font-size:13.5px; font-weight:700; cursor:pointer}
+  #installbar .ib-x{background:none; border:none; color:#dce8ff; font-size:16px; cursor:pointer; padding:2px 4px}
+
   .period-seg{display:flex; gap:4px; background:var(--card); border:1px solid var(--line); border-radius:13px; padding:4px; margin:2px 0 16px; position:sticky; top:62px; z-index:4; box-shadow:var(--shadow)}
   .period-seg button{flex:1; background:none; border:none; color:var(--muted); font-size:13px; font-weight:700; padding:9px 4px; border-radius:10px; cursor:pointer; font-family:inherit}
   .period-seg button.active{background:var(--accent); color:#06121f}
@@ -206,6 +211,12 @@
     <button class="gear" onclick="openSettings()">⚙️</button>
   </div>
 </header>
+
+<div id="installbar" style="display:none">
+  <span class="ib-txt">📲 Instalar o Diário na tela inicial</span>
+  <button class="ib-btn" onclick="doInstall()">Instalar</button>
+  <button class="ib-x" onclick="dismissInstall()" aria-label="fechar">✕</button>
+</div>
 
 <div class="wrap">
   <section class="view active" id="view-registrar">
@@ -931,6 +942,26 @@ async function disableNotif(){
   await swPost({type:'hide-notif'});
   toast('Atalhos desativados'); closeSheet();
 }
+/* botão de instalar (aparece quando o navegador permite) */
+let deferredPrompt=null;
+function isStandalone(){return window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;}
+function showInstallBar(){
+  const b=document.getElementById('installbar');
+  if(!b)return;
+  if(deferredPrompt && !isStandalone() && localStorage.getItem('db_install_dismiss')!=='1') b.style.display='flex';
+  else b.style.display='none';
+}
+window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredPrompt=e; showInstallBar(); });
+window.addEventListener('appinstalled',()=>{ deferredPrompt=null; const b=document.getElementById('installbar'); if(b)b.style.display='none'; toast('App instalado 💙'); });
+async function doInstall(){
+  if(!deferredPrompt){toast('Use o menu do navegador → Instalar app');return;}
+  deferredPrompt.prompt();
+  try{await deferredPrompt.userChoice;}catch(e){}
+  deferredPrompt=null;
+  const b=document.getElementById('installbar'); if(b)b.style.display='none';
+}
+function dismissInstall(){ localStorage.setItem('db_install_dismiss','1'); const b=document.getElementById('installbar'); if(b)b.style.display='none'; }
+
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
   navigator.serviceWorker.addEventListener('message',ev=>{
@@ -952,7 +983,7 @@ function revealApp(){
   document.getElementById('auth').classList.remove('show');
   document.getElementById('onboard').classList.remove('show');
   document.getElementById('app').classList.add('show');
-  loadEvents().then(()=>{ maybeShowNotif(); checkOpenParam(); });
+  loadEvents().then(()=>{ maybeShowNotif(); checkOpenParam(); showInstallBar(); });
 }
 function checkOpenParam(){
   try{
