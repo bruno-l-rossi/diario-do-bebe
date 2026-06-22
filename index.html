@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Diário do Bebê">
 <meta name="theme-color" content="#0d1b2a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <title>Diário do Bebê</title>
 <style>
   :root{
@@ -117,6 +120,9 @@
   .sheet h2{margin:2px 0 4px; font-size:18px}
   .sheet .ph{font-size:13px; color:var(--muted); margin:0 0 16px}
   .qbtns{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px}
+  .qbtns.three{grid-template-columns:1fr 1fr 1fr}
+  .qbtns.three .qbtn{padding:12px 4px; font-size:13.5px}
+  .qbtns.three .qbtn .qe{font-size:21px}
   .qbtn{border:1.5px solid var(--line); background:var(--card); border-radius:14px; padding:14px 8px; font-size:15px; font-weight:700; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--ink)}
   .qbtn .qe{font-size:24px}
   .qbtn:active{transform:scale(.97)}
@@ -269,6 +275,12 @@ const QUAL=[
   {v:2,nome:'Médio',emoji:'🙂',cor:'var(--mid)',cssCor:'#9fce6a'},
   {v:3,nome:'Bem',emoji:'😋',cor:'var(--good)',cssCor:'#62c46f'},
 ];
+const SERVERS=[
+  {v:'mae',nome:'Mãe',emoji:'👩',cssCor:'#e29ad0'},
+  {v:'pai',nome:'Pai',emoji:'👨',cssCor:'#7fa8e0'},
+  {v:'outro',nome:'Outro',emoji:'🧑',cssCor:'#9aa7b8'},
+];
+function servedInfo(v){return SERVERS.find(s=>s.v===v)||null;}
 
 /* ===== datas ===== */
 function pad2(n){return String(n).padStart(2,'0');}
@@ -414,7 +426,7 @@ async function saveOnboard(){
 async function loadEvents(){
   const {data,error}=await sb.from('events').select('*').order('ts',{ascending:false});
   if(error){toast('Erro ao carregar');console.error(error);return;}
-  EV=data.map(r=>({id:r.id,type:r.type,ts:new Date(r.ts).getTime(),end:r.end_ts?new Date(r.end_ts).getTime():null,quality:r.quality,note:r.note||''}));
+  EV=data.map(r=>({id:r.id,type:r.type,ts:new Date(r.ts).getTime(),end:r.end_ts?new Date(r.end_ts).getTime():null,quality:r.quality,note:r.note||'',served:r.served_by||''}));
   render();
 }
 function activeSoneca(){return EV.find(e=>e.type==='soneca'&&!e.end);}
@@ -457,12 +469,17 @@ async function onMamada(){
   await loadEvents();
 }
 function openRefeicao(){
-  let chosen=null;
+  let chosen=null, chosenS=null;
   const html=`
     <h2>🥣 Refeição</h2>
     <p class="ph">O quanto ${BABY||'ele'} comeu agora?</p>
     <div class="qbtns" id="qb">
       ${QUAL.map(q=>`<button class="qbtn" onclick="pickQ(${q.v})" id="q${q.v}"><span class="qe">${q.emoji}</span>${q.nome}</button>`).join('')}
+    </div>
+    <div class="field"><label>Quem serviu (opcional)</label>
+      <div class="qbtns three">
+        ${SERVERS.map(s=>`<button class="qbtn" onclick="pickS('${s.v}')" id="s_${s.v}"><span class="qe">${s.emoji}</span>${s.nome}</button>`).join('')}
+      </div>
     </div>
     <div class="field"><label>Nota (opcional)</label><input id="rnote" placeholder="ex: fruta, recusou a sopa, comeu sozinho"></div>
     <div class="stack">
@@ -471,10 +488,11 @@ function openRefeicao(){
     </div>`;
   showSheet(html);
   window.pickQ=v=>{chosen=v;QUAL.forEach(q=>{const el=document.getElementById('q'+q.v);el.style.borderColor=q.v===v?q.cor:'var(--line)';el.style.background=q.v===v?q.cor:'var(--card)';el.style.color=q.v===v?'#06121f':'var(--ink)';});};
+  window.pickS=v=>{chosenS=v;SERVERS.forEach(s=>{const el=document.getElementById('s_'+s.v);el.style.borderColor=s.v===v?s.cssCor:'var(--line)';el.style.background=s.v===v?s.cssCor:'var(--card)';el.style.color=s.v===v?'#06121f':'var(--ink)';});};
   window.saveRefeicao=async()=>{
     if(chosen===null){toast('Escolha o quanto comeu');return;}
     const note=document.getElementById('rnote').value.trim();
-    const {error}=await sb.from('events').insert({type:'refeicao',ts:new Date().toISOString(),quality:chosen,note});
+    const {error}=await sb.from('events').insert({type:'refeicao',ts:new Date().toISOString(),quality:chosen,note,served_by:chosenS});
     if(error){toast('Erro');return;}
     closeSheet(); toast('Refeição registrada 🥣'); await loadEvents();
   };
@@ -485,8 +503,9 @@ async function delEvent(id){
   toast('Apagado'); await loadEvents();
 }
 
-let edQ=null;
+let edQ=null, edS=null;
 window.pickQE=v=>{edQ=v;QUAL.forEach(q=>{const el=document.getElementById('qe'+q.v);if(!el)return;el.style.borderColor=q.v===v?q.cor:'var(--line)';el.style.background=q.v===v?q.cor:'var(--card)';el.style.color=q.v===v?'#06121f':'var(--ink)';});};
+window.pickSE=v=>{edS=v;SERVERS.forEach(s=>{const el=document.getElementById('se_'+s.v);if(!el)return;el.style.borderColor=s.v===v?s.cssCor:'var(--line)';el.style.background=s.v===v?s.cssCor:'var(--card)';el.style.color=s.v===v?'#06121f':'var(--ink)';});};
 function openEdit(id){
   const e=EV.find(x=>x.id===id); if(!e)return;
   const t=TYPES[e.type];
@@ -497,13 +516,14 @@ function openEdit(id){
     <div class="field"><label>${isSession?'Início':'Horário'}</label><input type="datetime-local" id="ed-ts" value="${toLocalInput(e.ts)}"></div>`;
   if(isSession) html+=`<div class="field"><label>Fim${e.end?'':' (deixe vazio se ainda em andamento)'}</label><input type="datetime-local" id="ed-end" value="${e.end?toLocalInput(e.end):''}"></div>`;
   if(isRef) html+=`<div class="field"><label>O quanto comeu</label><div class="qbtns">${QUAL.map(q=>`<button class="qbtn" onclick="pickQE(${q.v})" id="qe${q.v}"><span class="qe">${q.emoji}</span>${q.nome}</button>`).join('')}</div></div>
+      <div class="field"><label>Quem serviu</label><div class="qbtns three">${SERVERS.map(s=>`<button class="qbtn" onclick="pickSE('${s.v}')" id="se_${s.v}"><span class="qe">${s.emoji}</span>${s.nome}</button>`).join('')}</div></div>
       <div class="field"><label>Nota</label><input id="ed-note" value="${(e.note||'').replace(/"/g,'&quot;')}" placeholder="opcional"></div>`;
   html+=`<div class="stack">
       <button class="btn primary" onclick="saveEdit('${id}',${isSession},${isRef})">Salvar</button>
       <button class="btn ghost" onclick="closeSheet()">Cancelar</button>
     </div>`;
   showSheet(html);
-  if(isRef){edQ=e.quality; pickQE(e.quality);}
+  if(isRef){edQ=e.quality; pickQE(e.quality); edS=e.served||null; if(edS)pickSE(edS);}
 }
 async function saveEdit(id,isSession,isRef){
   const tsV=document.getElementById('ed-ts').value;
@@ -516,7 +536,7 @@ async function saveEdit(id,isSession,isRef){
       patch.end_ts=new Date(endV).toISOString();
     } else patch.end_ts=null;
   }
-  if(isRef){patch.quality=(edQ==null?null:edQ); patch.note=document.getElementById('ed-note').value.trim();}
+  if(isRef){patch.quality=(edQ==null?null:edQ); patch.note=document.getElementById('ed-note').value.trim(); patch.served_by=edS||null;}
   const {error}=await sb.from('events').update(patch).eq('id',id);
   if(error){toast('Erro ao salvar');console.error(error);return;}
   closeSheet(); toast('Atualizado 💙'); await loadEvents();
@@ -639,7 +659,7 @@ function renderHist(){
         if(e.end){const L=sonoLiquido(e);t1='Sono noturno';t2=fmtH(e.ts)+' → '+fmtH(e.end)+' · '+fmtDur(L.net)+(L.n?(' líq. · '+L.n+'× acordado ('+fmtDur(L.awake)+')'):'');}
         else{t1='Sono noturno';t2='dormindo…';}
       }
-      else if(e.type==='refeicao'){const q=QUAL[e.quality]||QUAL[0];t1=`Refeição <span class="badge" style="background:${q.cor}">${q.emoji} ${q.nome}</span>`;t2=e.note||'';}
+      else if(e.type==='refeicao'){const q=QUAL[e.quality]||QUAL[0];t1=`Refeição <span class="badge" style="background:${q.cor}">${q.emoji} ${q.nome}</span>`;const sv=servedInfo(e.served);t2=[sv?sv.emoji+' '+sv.nome:'',e.note||''].filter(Boolean).join(' · ');}
       else if(e.type==='mamada'){t1='Mamada';t2=e.end?(fmtH(e.ts)+' → '+fmtH(e.end)+' · '+fmtDur(e.end-e.ts)):'mamando…';}
       else if(e.type==='despertar'){t1='Despertar noturno';t2=e.end?(fmtH(e.ts)+' → '+fmtH(e.end)+' · '+fmtDur(e.end-e.ts)+' acordado'):('acordado desde '+fmtH(e.ts)+'…');}
       const isSession=['soneca','sono','despertar','mamada'].includes(e.type);
@@ -776,10 +796,14 @@ function statRefeicoes(pev,W){
   const dist=[0,1,2,3].map(v=>ref.filter(e=>e.quality===v).length);
   pushDoughnut('ch-ref-dist',QUAL.map(q=>q.emoji+' '+q.nome),dist,QUAL.map(q=>q.cssCor));
   const avgAll=ref.reduce((s,e)=>s+e.quality,0)/ref.length; const qAll=QUAL[Math.round(avgAll)];
+  const servCount=SERVERS.map(s=>ref.filter(e=>e.served===s.v).length);
+  const hasServ=servCount.some(n=>n>0);
+  if(hasServ)pushDoughnut('ch-ref-serv',SERVERS.map(s=>s.emoji+' '+s.nome),servCount,SERVERS.map(s=>s.cssCor));
   const inner=`<div class="hint" style="margin:0 0 4px">No geral come <b>${qAll.emoji} ${qAll.nome.toLowerCase()}</b> (${ref.length} refeições no período).</div>
     <div class="chart-cap">Como come no geral</div>${chartBox('ch-ref-dist','mini')}
     <div class="chart-cap">Aceitação média por horário</div>${chartBox('ch-ref-hora','mini')}
-    <div class="hint" style="margin-top:8px">Melhor horário: <b>${best.h!=null?hourLabel(best.h):'—'}</b>.</div>`;
+    <div class="hint" style="margin-top:8px">Melhor horário: <b>${best.h!=null?hourLabel(best.h):'—'}</b>.</div>
+    ${hasServ?`<div class="chart-cap">Quem serviu</div>${chartBox('ch-ref-serv','mini')}`:''}`;
   return card('🥣','Aceitação das refeições','Em quais horários come melhor?',inner);
 }
 function statSonecas(pev,W){
@@ -846,6 +870,10 @@ function openSettings(){
         <button class="${TIMEFMT==='12h'?'active':''}" onclick="setTimeFmt('12h')">AM/PM <span style="font-weight:600;opacity:.7">2:30 PM</span></button>
       </div>
     </div>
+    <div class="field"><label>Atalhos na notificação</label>
+      <button class="btn ${notifAtivo()?'ghost':'primary'}" style="width:100%" onclick="${notifAtivo()?'disableNotif()':'enableNotif()'}">${notifAtivo()?'🔔 Ativado · toque pra desativar':'🔔 Ativar registro pela notificação'}</button>
+      <div class="hint" style="margin-top:6px">Deixa botões de registro fixos na barra de notificação e na tela de bloqueio, pra registrar sem abrir o app. Some quando você desativa.</div>
+    </div>
     <div class="stack">
       <button class="btn primary" onclick="saveProfile()">Salvar</button>
       <button class="btn ghost" onclick="logout()">Sair da conta</button>
@@ -878,6 +906,40 @@ async function saveProfileRow(){
 let toastT=null;
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1900);}
 
+/* ===== PWA: service worker + notificação ===== */
+async function swPost(msg){
+  if(!('serviceWorker' in navigator))return;
+  try{const reg=await navigator.serviceWorker.ready;(reg.active||navigator.serviceWorker.controller)&&(reg.active||navigator.serviceWorker.controller).postMessage(msg);}catch(e){}
+}
+function pushSession(session){
+  if(!session)return;
+  swPost({type:'session',session:{access_token:session.access_token,refresh_token:session.refresh_token,expires_at:session.expires_at}});
+}
+function notifAtivo(){return localStorage.getItem('db_notif')==='1' && ('Notification' in window) && Notification.permission==='granted';}
+function maybeShowNotif(){ if(notifAtivo()) swPost({type:'show-notif'}); }
+async function enableNotif(){
+  if(!('Notification' in window)||!('serviceWorker' in navigator)){toast('Este navegador não suporta');return;}
+  let p=Notification.permission;
+  if(p!=='granted') p=await Notification.requestPermission();
+  if(p!=='granted'){toast('Permissão negada — libere nas configurações do navegador');return;}
+  localStorage.setItem('db_notif','1');
+  await swPost({type:'show-notif'});
+  toast('Atalhos na notificação ativados 🔔'); closeSheet();
+}
+async function disableNotif(){
+  localStorage.removeItem('db_notif');
+  await swPost({type:'hide-notif'});
+  toast('Atalhos desativados'); closeSheet();
+}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker.addEventListener('message',ev=>{
+    const d=ev.data||{};
+    if(d.type==='reload'){ if(typeof loadEvents==='function')loadEvents(); }
+    else if(d.type==='open-refeicao'){ openRefeicao(); }
+  });
+}
+
 /* ===== boot ===== */
 async function loadProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('user_id',USERID).maybeSingle();
@@ -890,12 +952,21 @@ function revealApp(){
   document.getElementById('auth').classList.remove('show');
   document.getElementById('onboard').classList.remove('show');
   document.getElementById('app').classList.add('show');
-  loadEvents();
+  loadEvents().then(()=>{ maybeShowNotif(); checkOpenParam(); });
+}
+function checkOpenParam(){
+  try{
+    const p=new URLSearchParams(location.search);
+    if(p.get('open')==='refeicao'){ openRefeicao(); history.replaceState(null,'',location.pathname); }
+  }catch(e){}
 }
 function showAuth(){document.getElementById('boot').style.display='none';document.getElementById('app').classList.remove('show');document.getElementById('onboard').classList.remove('show');document.getElementById('auth').classList.add('show');}
 async function enter(session){currentEmail=session.user.email; USERID=session.user.id; await loadProfile(); if(!BABY)showOnboard(); else revealApp();}
-sb.auth.onAuthStateChange((event,session)=>{ if(session)enter(session); else showAuth(); });
-(async()=>{const {data}=await sb.auth.getSession(); if(data.session)enter(data.session); else showAuth();})();
+sb.auth.onAuthStateChange((event,session)=>{
+  if(session){ pushSession(session); if(event==='TOKEN_REFRESHED')return; enter(session); }
+  else { swPost({type:'logout'}); showAuth(); }
+});
+(async()=>{const {data}=await sb.auth.getSession(); if(data.session){pushSession(data.session); enter(data.session);} else showAuth();})();
 </script>
 </body>
 </html>
